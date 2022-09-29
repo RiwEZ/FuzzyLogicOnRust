@@ -2,18 +2,26 @@ use crate::set::*;
 use crate::shape::*;
 
 struct FuzzyEngine<const N: usize> {
-    rules: Vec<([FuzzySet; N], FuzzySet)>,
+    inputs_var: [LinguisticVar; N],
+    output_var: LinguisticVar,
+    rules: Vec<([String; N], String)>, // list of ([input1_term, input2_term, ...] -> output_term)
 }
 
 impl<const N: usize> FuzzyEngine<N> {
-    pub fn new() -> FuzzyEngine<N> {
+    pub fn new(inputs_var: [LinguisticVar; N], output_var: LinguisticVar) -> FuzzyEngine<N> {
         FuzzyEngine {
-            rules: Vec::<([FuzzySet; N], FuzzySet)>::new(),
+            inputs_var,
+            output_var,
+            rules: Vec::<([String; N], String)>::new(),
         }
     }
 
-    pub fn add_rule(&mut self, cond: [FuzzySet; N], res: FuzzySet) {
-        self.rules.push((cond, res));
+    pub fn add_rule(&mut self, cond: [String; N], res: String) {
+        for i in 0..self.inputs_var.len() {
+            self.inputs_var[i].term(&cond[i]);
+        }
+        self.output_var.term(&res);
+        self.rules.push((cond, res));       
     }
 
     pub fn calculate(&self, inputs: [f64; N]) -> FuzzySet {
@@ -21,11 +29,13 @@ impl<const N: usize> FuzzyEngine<N> {
         for j in 0..self.rules.len() {
             let mut aj = f64::MAX;
             for i in 0..self.rules[j].0.len() {
-                let v = self.rules[j].0[i].degree_of(inputs[i]);
+                let fuzzy_set = self.inputs_var[i].term(&self.rules[j].0[i]);
+                
+                let v = fuzzy_set.degree_of(inputs[i]);
                 aj = aj.min(v);
             }
-
-            let out = self.rules[j].1.min(aj, format!("f{}", j));
+            let out = self.output_var.term(&self.rules[j].1)
+                .min(aj, format!("f{}", j));
             temp.push(out);
         }
 
@@ -42,51 +52,36 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic]
+    fn test_adding_rule() {
+
+    }
+
+    #[test]
     fn basic_test() {
-        let mut rsi = Domain::new("rsi".into(), 0f64, 100f64, 0.01f64);
-        let mut ma = Domain::new("ma".into(), 0f64, 100f64, 0.01f64);
-        let mut trend = Domain::new("trend".into(), 0f64, 100f64, 0.01f64);
+        let rsi = LinguisticVar::new(vec![
+            (trinagular(20f64, 1.0, 20f64), "low".into()),
+            (trinagular(80f64, 1.0, 20f64), "high".into())
+        ], arange(0f64, 100f64, 0.01));
+        
+        let ma = LinguisticVar::new(vec![
+            (trinagular(30f64, 0.8, 20f64), "low".into())
+        ], arange(0f64, 100f64, 0.01));
+        
+        let trend = LinguisticVar::new(vec![
+            (trinagular(30f64, 1f64, 30f64), "weak".into())
+        ], arange(0f64, 100f64, 0.01));
 
-        let rsi_l = FuzzySet::new(
-            &rsi.members,
-            trinagular(20f64, 1.0f64, 20f64),
-            "low_rsi".into(),
-        )
-        ;
-        let rsi_h = FuzzySet::new(
-            &rsi.members,
-            trinagular(80f64, 1.0f64, 20f64),
-            "high_rsi".into(),
-        );
 
-        let ma_l = FuzzySet::new(
-            &ma.members,
-            trinagular(30f64, 0.8f64, 20f64),
-            "low_ma".into(),
-        );
+        let mut f_engine = FuzzyEngine::<2>::new([rsi, ma], trend);
 
-        let weak = FuzzySet::new(
-            &trend.members,
-            trinagular(30f64, 1.0f64, 30f64),
-            "weak".into(),
-        );
-
-        let mut f_engine = FuzzyEngine::<2>::new();
-
-        f_engine.add_rule([rsi_l.clone(), ma_l.clone()], weak.clone());
-        f_engine.add_rule([rsi_h.clone(), ma_l.clone()], weak.clone());
+        f_engine.add_rule(["low".into(), "low".into()], "weak".into());
+        f_engine.add_rule(["high".into(), "low".into()], "weak".into());
 
         let res = f_engine.calculate([15f64, 25f64]);
 
-        rsi.add(rsi_l);
-        rsi.add(rsi_h);
-        rsi.plot("img/rsi.png".into()).unwrap();
-
-        ma.add(ma_l);
-        ma.plot("img/ma.png".into()).unwrap();
-
-        trend.add(res);
-        trend.add(weak);
-        trend.plot("img/t2.png".into()).unwrap();
+        //rsi.plot("rsi".into(), "img/rsi.png".into()).unwrap();
+        //ma.plot("ma".into() ,"img/ma.png".into()).unwrap();
+        //trend.plot("trend".into() ,"img/trend.png".into()).unwrap();
     }
 }
