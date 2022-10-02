@@ -1,6 +1,6 @@
 use crate::shape::*;
 use plotters::prelude::*;
-
+use std::error::Error;
 
 pub fn arange(start: f64, stop: f64, interval: f64) -> Vec<f64> {
     if stop < start {
@@ -17,14 +17,14 @@ pub fn arange(start: f64, stop: f64, interval: f64) -> Vec<f64> {
         n += interval;
         if interval < 1.0 {
             n = (n * r).round() / r;
-        } 
+        }
     }
     members
 }
 
 pub struct LinguisticVar {
     pub sets: Vec<FuzzySet>,
-    pub universe: Vec<f64>
+    pub universe: Vec<f64>,
 }
 
 impl LinguisticVar {
@@ -39,12 +39,15 @@ impl LinguisticVar {
     pub fn term(&self, name: &String) -> &FuzzySet {
         match self.sets.iter().find(|x| x.name == *name) {
             Some(x) => x,
-            None => panic!["there're no fuzzy set name {} in this linguistic variable", name],
+            None => panic![
+                "there're no fuzzy set name {} in this linguistic variable",
+                name
+            ],
         }
     }
-    
-    pub fn plot(&self, name: String, path: String) -> Result<(), Box<dyn std::error::Error>> {
-        let root = BitMapBackend::new(&path, (1024, 768)).into_drawing_area();
+
+    pub fn plot(&self, name: String, path: String) -> Result<(), Box<dyn Error>> {
+        let root = SVGBackend::new(&path, (1024, 768)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
@@ -63,19 +66,19 @@ impl LinguisticVar {
             .disable_y_mesh()
             .draw()?;
 
-        let color: Vec<&RGBColor> = vec![&RED, &BLUE, &GREEN];
         for i in 0..self.sets.len() {
+            let color = Palette99::pick(i);
             chart
                 .draw_series(LineSeries::new(
                     self.universe
                         .iter()
                         .zip(self.sets[i].membership.iter())
                         .map(|(x, y)| (*x, *y)),
-                    color[i % color.len()],
+                    color.stroke_width(2),
                 ))?
                 .label(self.sets[i].name.clone())
-                .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLACK));
-            // there're a problem with styling label
+                .legend(move |(x, y)| PathElement::new([(x, y), (x + 20, y)], color.filled()));
+            // there're a problem with styling legend
         }
 
         chart
@@ -108,6 +111,50 @@ impl FuzzySet {
             universe: universe.clone(),
             membership,
         }
+    }
+
+    pub fn plot(&self, name: String, path: String) -> Result<(), Box<dyn Error>> {
+        let root = SVGBackend::new(&path, (1024, 768)).into_drawing_area();
+        root.fill(&WHITE)?;
+
+        let mut chart = ChartBuilder::on(&root)
+            .caption(name, ("Hack", 44, FontStyle::Bold).into_font())
+            .set_label_area_size(LabelAreaPosition::Left, 60)
+            .set_label_area_size(LabelAreaPosition::Bottom, 60)
+            .margin(20)
+            .build_cartesian_2d(
+                self.universe[0]..self.universe[self.universe.len() - 1],
+                0f64..1f64,
+            )?;
+
+        chart
+            .configure_mesh()
+            .disable_x_mesh()
+            .disable_y_mesh()
+            .draw()?;
+
+        let color = Palette99::pick(0);
+        chart
+            .draw_series(LineSeries::new(
+                self.universe
+                    .iter()
+                    .zip(self.membership.iter())
+                    .map(|(x, y)| (*x, *y)),
+                color.stroke_width(2),
+            ))?
+            .label(self.name.clone())
+            .legend(move |(x, y)| PathElement::new([(x, y), (x + 20, y)], color.filled()));
+
+        chart
+            .configure_series_labels()
+            .label_font(("Hack", 14).into_font())
+            .background_style(&WHITE)
+            .border_style(&BLACK)
+            .draw()?;
+
+        root.present()?;
+
+        Ok(())
     }
 
     pub fn degree_of(&self, input: f64) -> f64 {
@@ -175,33 +222,38 @@ mod tests {
     #[test]
     fn test_arange() {
         assert_eq!(arange(0f64, 5f64, 1f64), vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
-        assert_eq!(arange(0f64, 0.5f64, 0.1f64), vec![0.0, 0.1, 0.2, 0.3, 0.4, 0.5]);
+        assert_eq!(
+            arange(0f64, 0.5f64, 0.1f64),
+            vec![0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+        );
     }
 
     #[test]
     fn test_degree() {
         let s1 = FuzzySet::new(
-            &arange(0.0, 10.0, 0.01), 
-            trinagular(5f64, 0.8f64, 3f64), 
-            "f1".into()
+            &arange(0.0, 10.0, 0.01),
+            trinagular(5f64, 0.8f64, 3f64),
+            "f1".into(),
         );
-        
+
         assert_eq!(s1.degree_of(5.0f64), 0.8);
         assert_eq!(s1.degree_of(3.5f64), 0.4);
-        assert_eq!(s1.degree_of(0.0f64), 0.0);
+        assert_eq!(s1.degree_of(0.0f64), 0.0);   
     }
-    
+
     #[test]
     fn linguistic() {
-        let var1 = LinguisticVar::new(vec![
-            (trinagular(5f64, 0.8, 3f64), "normal".into()),
-            (trinagular(3f64, 0.8, 1.5f64), "weak".into())
-        ], arange(0f64, 10f64, 0.01));
+        let var1 = LinguisticVar::new(
+            vec![
+                (trinagular(5f64, 0.8, 3f64), "normal".into()),
+                (trinagular(3f64, 0.8, 1.5f64), "weak".into()),
+            ],
+            arange(0f64, 10f64, 0.01),
+        );
 
         assert_eq!(var1.term(&"normal".into()).degree_of(5.0), 0.8);
         assert_eq!(var1.term(&"weak".into()).degree_of(3.0), 0.8);
 
-        var1.plot("var1".into(), "img/t.png".into()).unwrap();
+        var1.plot("var1".into(), "img/t.svg".into()).unwrap();
     }
-
 }

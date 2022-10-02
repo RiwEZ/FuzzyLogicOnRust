@@ -1,5 +1,6 @@
 use crate::set::*;
 use crate::shape::*;
+use std::error::Error;
 
 struct FuzzyEngine<const N: usize> {
     inputs_var: [LinguisticVar; N],
@@ -21,7 +22,7 @@ impl<const N: usize> FuzzyEngine<N> {
             self.inputs_var[i].term(&cond[i]);
         }
         self.output_var.term(&res);
-        self.rules.push((cond, res));       
+        self.rules.push((cond, res));
     }
 
     pub fn calculate(&self, inputs: [f64; N]) -> FuzzySet {
@@ -30,11 +31,13 @@ impl<const N: usize> FuzzyEngine<N> {
             let mut aj = f64::MAX;
             for i in 0..self.rules[j].0.len() {
                 let fuzzy_set = self.inputs_var[i].term(&self.rules[j].0[i]);
-                
+
                 let v = fuzzy_set.degree_of(inputs[i]);
                 aj = aj.min(v);
             }
-            let out = self.output_var.term(&self.rules[j].1)
+            let out = self
+                .output_var
+                .term(&self.rules[j].1)
                 .min(aj, format!("f{}", j));
             temp.push(out);
         }
@@ -54,24 +57,38 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_adding_rule() {
-
+        let rsi = LinguisticVar::new(
+            vec![
+                (trinagular(20f64, 1.0, 20f64), "low".into()),
+                (trinagular(80f64, 1.0, 20f64), "high".into()),
+            ],
+            arange(0f64, 100f64, 0.01),
+        );
     }
 
     #[test]
-    fn basic_test() {
-        let rsi = LinguisticVar::new(vec![
-            (trinagular(20f64, 1.0, 20f64), "low".into()),
-            (trinagular(80f64, 1.0, 20f64), "high".into())
-        ], arange(0f64, 100f64, 0.01));
-        
-        let ma = LinguisticVar::new(vec![
-            (trinagular(30f64, 0.8, 20f64), "low".into())
-        ], arange(0f64, 100f64, 0.01));
-        
-        let trend = LinguisticVar::new(vec![
-            (trinagular(30f64, 1f64, 30f64), "weak".into())
-        ], arange(0f64, 100f64, 0.01));
+    fn basic_test() -> Result<(), Box<dyn Error>> {
+        let rsi = LinguisticVar::new(
+            vec![
+                (trinagular(20f64, 1.0, 20f64), "low".into()),
+                (trinagular(80f64, 1.0, 20f64), "high".into()),
+            ],
+            arange(0f64, 100f64, 0.01),
+        );
 
+        let ma = LinguisticVar::new(
+            vec![(trinagular(30f64, 0.8, 20f64), "low".into())],
+            arange(0f64, 100f64, 0.01),
+        );
+
+        let trend = LinguisticVar::new(
+            vec![(trinagular(30f64, 1f64, 30f64), "weak".into())],
+            arange(0f64, 100f64, 0.01),
+        );
+
+        rsi.plot("rsi".into(), "img/rsi.svg".into())?;
+        ma.plot("ma".into(), "img/ma.svg".into()).unwrap();
+        trend.plot("trend".into(), "img/trend.svg".into()).unwrap();
 
         let mut f_engine = FuzzyEngine::<2>::new([rsi, ma], trend);
 
@@ -79,9 +96,8 @@ mod tests {
         f_engine.add_rule(["high".into(), "low".into()], "weak".into());
 
         let res = f_engine.calculate([15f64, 25f64]);
+        res.plot("t2".into(), "img/t2.svg".into())?;
 
-        //rsi.plot("rsi".into(), "img/rsi.png".into()).unwrap();
-        //ma.plot("ma".into() ,"img/ma.png".into()).unwrap();
-        //trend.plot("trend".into() ,"img/trend.png".into()).unwrap();
+        Ok(())
     }
 }
