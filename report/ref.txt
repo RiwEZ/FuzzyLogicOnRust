@@ -3,3 +3,6 @@ https://www.investopedia.com/terms/f/fuzzy-logic.asp
 https://github.com/amogorkon/fuzzylogic/blob/master/docs/Showcase.ipynb
 https://www.tutorialspoint.com/fuzzy_logic/fuzzy_logic_inference_system.htm
 https://github.com/auseckas/rsfuzzy
+
+securities: https://www.investopedia.com/terms/s/security.asp#:~:text=Securities%20are%20fungible%20and%20tradable,aspects%20of%20debt%20and%20equity.
+Touch bollinger band, and rsi, macd met condition -> entry, exit

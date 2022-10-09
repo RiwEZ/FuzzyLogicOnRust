@@ -1,0 +1,144 @@
+\documentclass{article}
+\usepackage{placeins}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{booktabs, siunitx}
+\usepackage{geometry}
+\usepackage{minted}
+\usepackage{subfiles}
+\usepackage{indentfirst}
+\usepackage[backend=biber]{biblatex}
+\usepackage[svgnames,table]{xcolor}
+
+\addbibresource{ref.bib}
+\usemintedstyle{emacs}
+\geometry{
+ a4paper,
+ total={170mm,257mm},
+ left=20mm,
+ top=20mm,
+ }
+\graphicspath{ {./images/} }
+
+\title{Assignment 2 Report}
+\author{Tanat Tangun 630610737}
+\date{September 2022}
+
+\begin{document}
+\maketitle
+This report is about the result of my fuzzy logic implementation on Rust language for 261456 - INTRO COMP INTEL FOR CPE class
+assignment. This report will be about how fuzzy-logic can help in trading securities and other assets. 
+If you are interested to know how I implement the fuzzy-logic and use it to help in trading securities and other assets
+, you can see the source code on my 
+\href{https://github.com/RiwEZ/MLPOnRust}{Github repository} or in this document appendix.
+
+\section*{Introduction}
+The term ``securities and other assets" in our report include securities such as stock, bonds, currencies, and other assets
+i.e. crypto-currency, house price, etc. In this report, we will focus on crypto-currency such as Bitcoin and Ethereum. Before we delve 
+further, let's understand that we are not trying to create more profit than any other techniques but we are trying to learn how
+to create fuzzy logic and explore how it might be useful for trading.
+
+\subsection*{Technical Indicators}
+According to \cite{technical_indicator}, ``Technical indicators are heuristic or pattern-based signals produced by the price, volume, 
+and/or open interest of a security or contract used by traders who follow technical analysis.
+By analyzing historical data, technical analysts use indicators to predict future price movements."
+
+We are trying to use technical indicators to help decide when to entry or exit to make a profit trade. Techinal indicators
+that we will use are RSI (Relative Strength Index) and Bollinger Bands.
+
+\subsubsection*{RSI - Relative Strength Index}
+According to \cite{rsi} ``The relative strength index (RSI) is a momentum indicator used in technical analysis. 
+RSI measures the speed and magnitude of a security's recent price changes to evaluate overvalued or 
+undervalued conditions in the price of that security."
+RSI is a value in range $[0, 100]$ and the value at time $t$ is defined as follows:
+$$
+    \text{RSI} = 100 - \frac{100}{1 + \text{RS}}
+$$
+where $\text{RS}$ is the relative strength of the last $n$ sessions and its defined as:
+$$
+    \text{RS} = \frac{\text{AverageGain}_t(n)}{\text{AverageLoss}_t(n)}
+$$
+where $\text{AverageGain}_t(n)$ and $\text{AverageLoss}_t(n)$ are the average of the gains ($\text{price}_t - \text{price}_{t-1}$) 
+and losses ($\text{price}_t < \text{price}_{t-1}$), obtained in the last n sessions. That is, from time $t - (n - 1)$ to time $t$. 
+However, theses values are usually from estimated using the following smoothing equations:
+$$
+    \text{AverageGain}_t(n) = \frac{\text{AverageGain}_{t-1}(n) \cdot (n-1) + \text{gain}_t}{n}
+$$ 
+$$
+    \text{AverageLoss}_t(n) = \frac{\text{AverageGain}_{t-1}(n) \cdot (n-1) + \text{loss}_t}{n}
+$$ 
+If a session $t$ result in gain then $\text{loss}_t = 0$ and, if results in loss the $\text{profit}_t = 0$. Commom number of sessions
+are $n = 14$ and a common interpretation of the RSI index is that it suggests oversold at value $< 30$, and overbought for value $ > 70$ 
+
+\subsubsection*{Bollinger Bands}
+According to \cite{bb}, ``A Bollinger Band is a technical analysis tool defined by a set of trendlines plotted two standard deviations
+(positively and negatively) away from a simple moving average (SMA) of a security's price.'' 
+Bollinger Bands ($\text{BOLU}$ for upper band, $\text{BOLD}$ for lower band) at time $t$ are defined as:
+$$
+\text{BOLU} = \text{MA}(n) + m * \sigma(n)
+$$
+$$
+\text{BOLD} = \text{MA}(n) - m * \sigma(n)
+$$
+where $m$ is number of standard deviations (usually 2), and both $\text{MA}(n)$ and $\sigma(n)$ of the last $n$ sessions are defined as:
+$$
+\text{MA}(n) = \frac{\sum_{i = 1}^{n}{p_i}}{n}
+$$
+$$
+\sigma(n) = \sqrt{\frac{\sum_{i = 1}^{n}{p_i - \text{MA}(n)}}{n}}
+$$
+where each $p_i$ is a typical price calulated as $p_i = \frac{(\text{high}_i + \text{low}_i + \text{close}_i)}{3}$
+
+Common number of sessions are $n = 20$ and a common interpretation is the closer the prices move to $\text{BOLU}$, 
+the more overbought the market, and the closer the prices move to the lower band, the more oversold the market.
+
+\section*{Entry rules}
+Entry rule tell you that at a current time, should you open a position or not? and it is what we are going to make with fuzzy logic.
+For clarifying, a position in this report will be in these 2 types:
+\begin{enumerate}
+    \item LONG, which we gain profit from price increasing.
+    \item SHORT, which we gain profit from price decreasing.
+\end{enumerate}
+
+\subsection*{Classic rules}
+The classic rules is based on set of fixed rules where the input are exact number and the outputs are binary values (1 - yes, 0 - no). 
+The condition is from the trader's belief which should have some uncertainty, but the classic rules can't include that uncertainty in the rules.
+An examples of classic rules can be seen on \cref*{table:1} and \cref*{table:2} which could be more complex and practical by adding more ``useful'' indicators.
+\begin{table}[htp]
+	\centering
+	\begin{tabular}{l c c c c c}
+		\toprule
+        {} & {RSI} & {} & {Bollinger Bands} & {} & {LONG} \\ 
+        \midrule
+        If & $<30$ & \& & $|\text{price} - \text{BOLD}| < 10$ & then & 1 \\
+        elseif & $<30$ & \& & $\text{price} - \text{BOLD} < -10$ & then & 1 \\
+        else &  &  &  & then & 0 \\
+        \bottomrule
+    \end{tabular} 
+    \caption{Examples for classic rule (LONG signal).}
+	\label{table:1}
+\end{table}
+\begin{table}[htp]
+	\centering
+	\begin{tabular}{l c c c c c}
+		\toprule
+        {} & {RSI} & {} & {Bollinger Bands} & {} & {SHORT} \\ 
+        \midrule
+        If & $ >70$ & \& & $|\text{price} - \text{BOLU}| < 10$ & then & 1 \\
+        elseif & $ >70$ & \& & $\text{price} - \text{BOLU} > 10$ & then & 1 \\
+        else &  &  &  & then & 0 \\
+        \bottomrule
+    \end{tabular} 
+    \caption{Examples for classic rule (SHORT signal).}
+	\label{table:2}
+\end{table}
+
+\subsection*{Fuzzy rules}
+
+\newpage
+\printbibliography
+
+\end{document}
