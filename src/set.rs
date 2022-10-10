@@ -22,22 +22,23 @@ pub fn arange(start: f64, stop: f64, interval: f64) -> Vec<f64> {
     members
 }
 
+#[derive(Clone)]
 pub struct LinguisticVar {
     pub sets: Vec<FuzzySet>,
     pub universe: Vec<f64>,
 }
 
 impl LinguisticVar {
-    pub fn new<T: Shape>(inputs: Vec<(T, String)>, universe: Vec<f64>) -> LinguisticVar {
+    pub fn new<T: Shape>(inputs: Vec<(T, &str)>, universe: Vec<f64>) -> LinguisticVar {
         let mut sets: Vec<FuzzySet> = vec![];
         for item in inputs {
-            sets.push(FuzzySet::new(&universe, item.0, item.1.clone()));
+            sets.push(FuzzySet::new(&universe, item.0, item.1.to_string()));
         }
         LinguisticVar { sets, universe }
     }
 
-    pub fn term(&self, name: &String) -> &FuzzySet {
-        match self.sets.iter().find(|x| x.name == *name) {
+    pub fn term(&self, name: &str) -> &FuzzySet {
+        match self.sets.iter().find(|x| x.name == name.to_string()) {
             Some(x) => x,
             None => panic![
                 "there're no fuzzy set name {} in this linguistic variable",
@@ -238,21 +239,21 @@ mod tests {
 
         assert_eq!(s1.degree_of(5.0f64), 0.8);
         assert_eq!(s1.degree_of(3.5f64), 0.4);
-        assert_eq!(s1.degree_of(0.0f64), 0.0);   
+        assert_eq!(s1.degree_of(0.0f64), 0.0);
     }
 
     #[test]
     fn linguistic() {
         let var1 = LinguisticVar::new(
             vec![
-                (trinagular(5f64, 0.8, 3f64), "normal".into()),
-                (trinagular(3f64, 0.8, 1.5f64), "weak".into()),
+                (trinagular(5f64, 0.8, 3f64), "normal"),
+                (trinagular(3f64, 0.8, 1.5f64), "weak"),
             ],
             arange(0f64, 10f64, 0.01),
         );
 
-        assert_eq!(var1.term(&"normal".into()).degree_of(5.0), 0.8);
-        assert_eq!(var1.term(&"weak".into()).degree_of(3.0), 0.8);
+        assert_eq!(var1.term("normal").degree_of(5.0), 0.8);
+        assert_eq!(var1.term("weak").degree_of(3.0), 0.8);
 
         var1.plot("var1".into(), "img/t.svg".into()).unwrap();
     }
