@@ -29,7 +29,7 @@ pub struct LinguisticVar {
 }
 
 impl LinguisticVar {
-    pub fn new<T: Shape>(inputs: Vec<(T, &str)>, universe: Vec<f64>) -> LinguisticVar {
+    pub fn new(inputs: Vec<(&dyn Shape, &str)>, universe: Vec<f64>) -> LinguisticVar {
         let mut sets: Vec<FuzzySet> = vec![];
         for item in inputs {
             sets.push(FuzzySet::new(&universe, item.0, item.1.to_string()));
@@ -64,7 +64,7 @@ impl LinguisticVar {
         chart
             .configure_mesh()
             .disable_x_mesh()
-            .disable_y_mesh()
+            .y_max_light_lines(0)
             .draw()?;
 
         for i in 0..self.sets.len() {
@@ -75,7 +75,7 @@ impl LinguisticVar {
                         .iter()
                         .zip(self.sets[i].membership.iter())
                         .map(|(x, y)| (*x, *y)),
-                    color.stroke_width(2),
+                    color.mix(0.5).stroke_width(2),
                 ))?
                 .label(self.sets[i].name.clone())
                 .legend(move |(x, y)| PathElement::new([(x, y), (x + 20, y)], color.filled()));
@@ -102,7 +102,7 @@ pub struct FuzzySet {
 }
 
 impl FuzzySet {
-    pub fn new<T: Shape>(universe: &Vec<f64>, fuzzy_f: T, name: String) -> FuzzySet {
+    pub fn new(universe: &Vec<f64>, fuzzy_f: &dyn Shape, name: String) -> FuzzySet {
         let mut membership: Vec<f64> = vec![];
         for i in 0..universe.len() {
             membership.push(fuzzy_f.function(universe[i]));
@@ -233,7 +233,7 @@ mod tests {
     fn test_degree() {
         let s1 = FuzzySet::new(
             &arange(0.0, 10.0, 0.01),
-            trinagular(5f64, 0.8f64, 3f64),
+            &trinagular(5f64, 0.8f64, 3f64),
             "f1".into(),
         );
 
@@ -246,8 +246,8 @@ mod tests {
     fn linguistic() {
         let var1 = LinguisticVar::new(
             vec![
-                (trinagular(5f64, 0.8, 3f64), "normal"),
-                (trinagular(3f64, 0.8, 1.5f64), "weak"),
+                (&trinagular(5f64, 0.8, 3f64), "normal"),
+                (&trinagular(3f64, 0.8, 1.5f64), "weak"),
             ],
             arange(0f64, 10f64, 0.01),
         );

@@ -73,8 +73,8 @@ mod tests {
     fn test_adding_rule() {
         let rsi = LinguisticVar::new(
             vec![
-                (trinagular(20f64, 1.0, 20f64), "low"),
-                (trinagular(80f64, 1.0, 20f64), "high"),
+                (&trinagular(20f64, 1.0, 20f64), "low"),
+                (&trinagular(80f64, 1.0, 20f64), "high"),
             ],
             arange(0f64, 100f64, 0.01),
         );
@@ -87,19 +87,19 @@ mod tests {
     fn basic_test() -> Result<(), Box<dyn Error>> {
         let rsi = LinguisticVar::new(
             vec![
-                (trinagular(20f64, 1.0, 20f64), "low"),
-                (trinagular(80f64, 1.0, 20f64), "high"),
+                (&trinagular(20f64, 1.0, 20f64), "low"),
+                (&trinagular(80f64, 1.0, 20f64), "high"),
             ],
             arange(0f64, 100f64, 0.01),
         );
 
         let ma = LinguisticVar::new(
-            vec![(trinagular(30f64, 0.8, 20f64), "low")],
+            vec![(&trinagular(30f64, 0.8, 20f64), "low")],
             arange(0f64, 100f64, 0.01),
         );
 
         let trend = LinguisticVar::new(
-            vec![(trinagular(30f64, 1f64, 30f64), "weak")],
+            vec![(&trinagular(30f64, 1f64, 30f64), "weak")],
             arange(0f64, 100f64, 0.01),
         );
 
