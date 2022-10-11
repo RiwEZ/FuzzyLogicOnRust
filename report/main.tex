@@ -30,8 +30,8 @@
 \begin{document}
 \maketitle
 This report is about the result of my fuzzy logic implementation on Rust language for 261456 - INTRO COMP INTEL FOR CPE class
-assignment. This report will be about how fuzzy-logic can help in trading securities and other assets. 
-If you are interested to know how I implement the fuzzy-logic and use it to help in trading securities and other assets
+assignment. This report will be about how fuzzy logic can help in trading securities and other assets. 
+If you are interested to know how I implement the fuzzy logic and use it to help in trading securities and other assets
 , you can see the source code on my 
 \href{https://github.com/RiwEZ/MLPOnRust}{Github repository} or in this document appendix.
 
@@ -61,16 +61,16 @@ where $\text{RS}$ is the relative strength of the last $n$ sessions and its defi
 $$
     \text{RS} = \frac{\text{AverageGain}_t(n)}{\text{AverageLoss}_t(n)}
 $$
-where $\text{AverageGain}_t(n)$ and $\text{AverageLoss}_t(n)$ are the average of the gains ($\text{price}_t - \text{price}_{t-1}$) 
+where $\text{AverageGain}_t(n)$ and $\text{AverageLoss}_t(n)$ are the average of the gains ($\text{price}_t > \text{price}_{t-1}$) 
 and losses ($\text{price}_t < \text{price}_{t-1}$), obtained in the last n sessions. That is, from time $t - (n - 1)$ to time $t$. 
 However, theses values are usually from estimated using the following smoothing equations:
 $$
     \text{AverageGain}_t(n) = \frac{\text{AverageGain}_{t-1}(n) \cdot (n-1) + \text{gain}_t}{n}
 $$ 
 $$
-    \text{AverageLoss}_t(n) = \frac{\text{AverageGain}_{t-1}(n) \cdot (n-1) + \text{loss}_t}{n}
+    \text{AverageLoss}_t(n) = \frac{\text{AverageLoss}_{t-1}(n) \cdot (n-1) + \text{loss}_t}{n}
 $$ 
-If a session $t$ result in gain then $\text{loss}_t = 0$ and, if results in loss the $\text{profit}_t = 0$. Commom number of sessions
+If a session $t$ result in gain then $\text{loss}_t = 0$ and, if results in loss then $\text{gain}_t = 0$. Commom number of sessions
 are $n = 14$ and a common interpretation of the RSI index is that it suggests oversold at value $< 30$, and overbought for value $ > 70$ 
 
 \subsubsection*{Bollinger Bands}
@@ -78,10 +78,10 @@ According to \cite{bb}, ``A Bollinger Band is a technical analysis tool defined 
 (positively and negatively) away from a simple moving average (SMA) of a security's price.'' 
 Bollinger Bands ($\text{BOLU}$ for upper band, $\text{BOLD}$ for lower band) at time $t$ are defined as:
 $$
-\text{BOLU} = \text{MA}(n) + m * \sigma(n)
+\text{BOLU} = \text{MA}(n) + m\sigma(n)
 $$
 $$
-\text{BOLD} = \text{MA}(n) - m * \sigma(n)
+\text{BOLD} = \text{MA}(n) - m\sigma(n)
 $$
 where $m$ is number of standard deviations (usually 2), and both $\text{MA}(n)$ and $\sigma(n)$ of the last $n$ sessions are defined as:
 $$
@@ -94,6 +94,9 @@ where each $p_i$ is a typical price calulated as $p_i = \frac{(\text{high}_i + \
 
 Common number of sessions are $n = 20$ and a common interpretation is the closer the prices move to $\text{BOLU}$, 
 the more overbought the market, and the closer the prices move to the lower band, the more oversold the market.
+For using in our fuzzy logic, we will use $\text{BOLU}$ and $\text{BOLD}$ as a 100\% mark from $\text{MA}$ and we will
+compute the diffrence of price from $\text{MA}$ to use it e.g. $\text{price} = 100$, and $\sigma = 10$
+then we calculate $100 \times \frac{\text{price} - \text{MA}}{2\sigma} = 55$ which we will use on our fuzzy logic.  
 
 \section*{Entry rules}
 Entry rule tell you that at a current time, should you open a position or not? and it is what we are going to make with fuzzy logic.
@@ -137,6 +140,69 @@ An examples of classic rules can be seen on \cref*{table:1} and \cref*{table:2} 
 \end{table}
 
 \subsection*{Fuzzy rules}
+Fuzzy rule can tolerate uncertainty better than classic rule due to its nature. So, we can use imprecise linguistic terms on 
+trading indicator e.g. rsi $\rightarrow$ HIGH, MEDIUM, LOW to help us decide when to entry. Thus, a trader can create entry rule 
+which reflect on trader's belief or represent expert's belief on market behaviour that is vague and often lack certainty.
+
+In this report, techincal indicators and output conditions have been fuzzified as shown on \cref*{fig:1} and below is an explanation 
+for each fuzzy set.
+\begin{itemize}
+    \item {RSI linguistic variable is descriped by 3 fuzzy sets:
+    \begin{itemize} 
+        \item LOW: indicating oversold situation, favor long position.
+        \item MEDIUM: not favor any position.
+        \item HIGH: indicating overbougth situation, favor short position.
+    \end{itemize}
+    }
+    \item {Bollinger Bands linguistic variable is described by 3 fuzzy sets:
+    \begin{itemize} 
+        \item LONG: indicating oversold situation, favor long position.
+        \item WAIT: not favor any position.
+        \item SHORT: indicating oversold situation, favor short position. 
+    \end{itemize}
+    }
+    \item {Long, Short linguistic variable is described by WEAK, STRONG, VERYSTRONG, whose names are self explanatory.}
+\end{itemize}
+
+\begin{figure}[ht]
+    \begin{subfigure}{.45\textwidth}
+        \centering
+        \includegraphics[width = \linewidth]{rsi.png}
+    \end{subfigure}
+    \begin{subfigure}{.45\textwidth}
+        \centering
+        \includegraphics[width = \linewidth]{bb.png}
+    \end{subfigure}
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width = 0.5\linewidth]{ls.png}
+    \end{subfigure}
+
+    \caption{Fuzzifications of the indicators and outputs}
+    \label{fig:1}
+\end{figure}
+\FloatBarrier
+
+\begin{table}[htp]
+	\centering
+	\begin{tabular}{c c c c}
+		\toprule
+        {RSI} & {Bollinger Bands} & {LONG} & {SHORT} \\ 
+        \midrule
+        HIGH & LONG & WEAK & WEAK \\
+        HIGH & WAIT & WEAK & STRONG \\
+        HIGH & SHORT & WEAK & VERYSTRONG \\
+        MEDIUM & LONG & WEAK & STRONG \\
+        MEDIUM & WAIT & WEAK & WEAK \\
+        MEDIUM & SHORT & STRONG & WEAK \\
+        LOW & LONG & VERYSTRONG & WEAK \\
+        LOW & WAIT & STRONG & WEAK \\
+        LOW & SHORT & WEAK & WEAK \\
+        \bottomrule
+    \end{tabular} 
+    \caption{Fuzzy rules.}
+	\label{table:3}
+\end{table}
 
 \newpage
 \printbibliography
