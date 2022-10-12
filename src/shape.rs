@@ -17,7 +17,7 @@ impl Shape for Triangular {
     }
 }
 
-pub fn trinagular(a: f64, b: f64, s: f64) -> Triangular {
+pub fn triangular(a: f64, b: f64, s: f64) -> Triangular {
     Triangular { a, b, s }
 }
 
@@ -26,19 +26,17 @@ pub struct Trapezoidal {
     b: f64,
     c: f64,
     d: f64,
-    e: f64
+    e: f64,
 }
 
 impl Shape for Trapezoidal {
     fn function(&self, x: f64) -> f64 {
         if x >= self.a && x < self.b {
-            return ((x - self.a)*self.e)/(self.b - self.a)
-        }
-        else if x >= self.b && x <= self.c {
-            return self.e           
-        } 
-        else if x > self.c && x <= self.d {
-            return self.e * (1.0 - (x - self.c).abs()/(self.d - self.c))
+            return ((x - self.a) * self.e) / (self.b - self.a);
+        } else if x >= self.b && x <= self.c {
+            return self.e;
+        } else if x > self.c && x <= self.d {
+            return self.e * (1.0 - (x - self.c).abs() / (self.d - self.c));
         }
         0.0
     }

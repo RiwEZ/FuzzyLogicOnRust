@@ -1,6 +1,4 @@
 use crate::set::*;
-use crate::shape::*;
-use std::error::Error;
 
 pub struct FuzzyEngine<const N: usize, const M: usize> {
     inputs_var: [LinguisticVar; N],
@@ -9,7 +7,10 @@ pub struct FuzzyEngine<const N: usize, const M: usize> {
 }
 
 impl<const N: usize, const M: usize> FuzzyEngine<N, M> {
-    pub fn new(inputs_var: [LinguisticVar; N], output_var: [LinguisticVar; M]) -> FuzzyEngine<N, M> {
+    pub fn new(
+        inputs_var: [LinguisticVar; N],
+        output_var: [LinguisticVar; M],
+    ) -> FuzzyEngine<N, M> {
         FuzzyEngine {
             inputs_var,
             outputs_var: output_var,
@@ -24,7 +25,7 @@ impl<const N: usize, const M: usize> FuzzyEngine<N, M> {
         for i in 0..self.outputs_var.len() {
             self.outputs_var[i].term(&res[i]); // term() check if term "res" is exist
         }
-        
+
         let conditions: Vec<String> = cond.iter().map(|x| x.to_string()).collect();
         let results: Vec<String> = res.iter().map(|x| x.to_string()).collect();
         self.rules.push((conditions, results));
@@ -42,18 +43,18 @@ impl<const N: usize, const M: usize> FuzzyEngine<N, M> {
 
             let mut t: Vec<FuzzySet> = vec![];
             for i in 0..self.rules[j].1.len() {
-                t.push(self
-                    .outputs_var[i]
-                    .term(&self.rules[j].1[i])
-                    .min(aj, format!("f{}", j)));
+                t.push(
+                    self.outputs_var[i]
+                        .term(&self.rules[j].1[i])
+                        .min(aj, format!("f{}", j)),
+                );
             }
-            
+
             temp.push(t);
         }
         let mut res: Vec<FuzzySet> = vec![];
         for i in 0..M {
             res.push(temp[0][i].std_union(&temp[0][i], "".into()));
-            
         }
         for j in 1..temp.len() {
             for i in 0..M {
@@ -66,6 +67,8 @@ impl<const N: usize, const M: usize> FuzzyEngine<N, M> {
 
 #[cfg(test)]
 mod tests {
+    use crate::shape::*;
+    use std::error::Error;
     use super::*;
 
     #[test]
@@ -73,8 +76,8 @@ mod tests {
     fn test_adding_rule() {
         let rsi = LinguisticVar::new(
             vec![
-                (&trinagular(20f64, 1.0, 20f64), "low"),
-                (&trinagular(80f64, 1.0, 20f64), "high"),
+                (&triangular(20f64, 1.0, 20f64), "low"),
+                (&triangular(80f64, 1.0, 20f64), "high"),
             ],
             arange(0f64, 100f64, 0.01),
         );
@@ -87,26 +90,28 @@ mod tests {
     fn basic_test() -> Result<(), Box<dyn Error>> {
         let rsi = LinguisticVar::new(
             vec![
-                (&trinagular(20f64, 1.0, 20f64), "low"),
-                (&trinagular(80f64, 1.0, 20f64), "high"),
+                (&triangular(20f64, 1.0, 20f64), "low"),
+                (&triangular(80f64, 1.0, 20f64), "high"),
             ],
             arange(0f64, 100f64, 0.01),
         );
 
         let ma = LinguisticVar::new(
-            vec![(&trinagular(30f64, 0.8, 20f64), "low")],
+            vec![(&triangular(30f64, 0.8, 20f64), "low")],
             arange(0f64, 100f64, 0.01),
         );
 
         let trend = LinguisticVar::new(
-            vec![(&trinagular(30f64, 1f64, 30f64), "weak")],
+            vec![(&triangular(30f64, 1f64, 30f64), "weak")],
             arange(0f64, 100f64, 0.01),
         );
 
         rsi.plot("rsi".into(), "img/test/rsi.svg".into())?;
         ma.plot("ma".into(), "img/test/ma.svg".into()).unwrap();
         ma.plot("ma".into(), "img/test/ma.svg".into()).unwrap();
-        trend.plot("trend".into(), "img/test/trend.svg".into()).unwrap();
+        trend
+            .plot("trend".into(), "img/test/trend.svg".into())
+            .unwrap();
 
         let mut f_engine = FuzzyEngine::new([rsi, ma], [trend]);
 

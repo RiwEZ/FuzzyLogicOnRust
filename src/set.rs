@@ -52,10 +52,10 @@ impl LinguisticVar {
         root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
-            .caption(name, ("Hack", 44, FontStyle::Bold).into_font())
+            .caption(name, ("Hack", 70, FontStyle::Bold).into_font())
             .set_label_area_size(LabelAreaPosition::Left, 60)
             .set_label_area_size(LabelAreaPosition::Bottom, 60)
-            .margin(20)
+            .margin(60)
             .build_cartesian_2d(
                 self.universe[0]..self.universe[self.universe.len() - 1],
                 0f64..1f64,
@@ -65,6 +65,10 @@ impl LinguisticVar {
             .configure_mesh()
             .disable_x_mesh()
             .y_max_light_lines(0)
+            .x_labels(5)
+            .y_labels(5)
+            .x_label_style(("Hack", 40).into_font())
+            .y_label_style(("Hack", 40).into_font())
             .draw()?;
 
         for i in 0..self.sets.len() {
@@ -75,16 +79,18 @@ impl LinguisticVar {
                         .iter()
                         .zip(self.sets[i].membership.iter())
                         .map(|(x, y)| (*x, *y)),
-                    color.mix(0.5).stroke_width(2),
+                    color.mix(0.5).stroke_width(4),
                 ))?
                 .label(self.sets[i].name.clone())
-                .legend(move |(x, y)| PathElement::new([(x, y), (x + 20, y)], color.filled()));
+                .legend(move |(x, y)| {
+                    PathElement::new([(x, y), (x + 20, y)], color.filled().stroke_width(4))
+                });
             // there're a problem with styling legend
         }
 
         chart
             .configure_series_labels()
-            .label_font(("Hack", 14).into_font())
+            .label_font(("Hack", 50).into_font())
             .background_style(&WHITE)
             .border_style(&BLACK)
             .draw()?;
@@ -233,7 +239,7 @@ mod tests {
     fn test_degree() {
         let s1 = FuzzySet::new(
             &arange(0.0, 10.0, 0.01),
-            &trinagular(5f64, 0.8f64, 3f64),
+            &triangular(5f64, 0.8f64, 3f64),
             "f1".into(),
         );
 
@@ -246,8 +252,8 @@ mod tests {
     fn linguistic() {
         let var1 = LinguisticVar::new(
             vec![
-                (&trinagular(5f64, 0.8, 3f64), "normal"),
-                (&trinagular(3f64, 0.8, 1.5f64), "weak"),
+                (&triangular(5f64, 0.8, 3f64), "normal"),
+                (&triangular(3f64, 0.8, 1.5f64), "weak"),
             ],
             arange(0f64, 10f64, 0.01),
         );

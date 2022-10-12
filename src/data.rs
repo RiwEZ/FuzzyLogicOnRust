@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::fs;
 
 #[derive(Deserialize, Debug)]
-struct Record {
+pub struct Record {
     pub snapped_at: String,
     pub price: f64,
 }
@@ -18,7 +18,7 @@ fn gain_loss(p0: f64, p1: f64) -> (f64, f64) {
     res
 }
 
-fn rsi(data: &Vec<Record>, n: usize) -> Vec<f64> {
+pub fn rsi(data: &Vec<Record>, n: usize) -> Vec<f64> {
     let mut rsi: Vec<f64> = vec![];
 
     let mut gains: Vec<f64> = vec![];
@@ -56,7 +56,7 @@ fn rsi(data: &Vec<Record>, n: usize) -> Vec<f64> {
     rsi
 }
 
-fn bb(data: &Vec<Record>, n: usize) -> Vec<(f64, f64)> {
+pub fn bb(data: &Vec<Record>, n: usize) -> Vec<(f64, f64)> {
     let mut bb: Vec<(f64, f64)> = vec![];
     for (i, _) in data.iter().enumerate() {
         if i < n {
@@ -65,18 +65,23 @@ fn bb(data: &Vec<Record>, n: usize) -> Vec<(f64, f64)> {
         }
 
         let mut sum = 0.0;
-        for j in (i-n)..i {
-            sum += data[j].price;   
+        for j in (i - n)..i {
+            sum += data[j].price;
         }
-        let ma = sum/(n as f64);
-        let std = ((sum - ma)/n as f64).sqrt(); 
-        bb.push((ma + 2.0*std, ma - 2.0*std));
+        let ma = sum / (n as f64);
+
+        let mut std_sum = 0.0;
+        for j in (i - n)..i {
+            std_sum += (data[j].price - ma).powi(2);
+        }
+        let std = (std_sum / n as f64).sqrt();
+        bb.push((ma, std));
     }
     bb
 }
 
 /// read coingecko csv data
-fn read_csv(path: &str) -> Vec<Record> {
+pub fn read_csv(path: &str) -> Vec<Record> {
     let contents = fs::read_to_string(path).unwrap();
 
     let mut rdr = csv::Reader::from_reader(contents.as_bytes());

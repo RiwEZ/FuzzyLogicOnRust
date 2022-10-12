@@ -1,5 +1,6 @@
 /target
 /.vscode
+/img
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
