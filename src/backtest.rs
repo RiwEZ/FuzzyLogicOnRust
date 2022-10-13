@@ -3,7 +3,7 @@
 // entry when signal is >= 40
 // entry size is 20% of capital
 // stop-loss when price go down 10%
-// take profit when price g`o up 20%
+// take profit when price go up 20%
 
 struct Position {
     at_price: f64,

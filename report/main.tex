@@ -23,7 +23,10 @@
  }
 \graphicspath{ {./images/} }
 
-\title{Assignment 2 Report}
+\title{
+Assignment 2 Report\\
+\large Fuzzy logic in trading securities
+}
 \author{Tanat Tangun 630610737}
 \date{September 2022}
 
@@ -33,15 +36,16 @@ This report is about the result of my fuzzy logic implementation on Rust languag
 assignment. This report will be about how fuzzy logic can help in trading securities and other assets. 
 If you are interested to know how I implement the fuzzy logic and use it to help in trading securities and other assets
 , you can see the source code on my 
-\href{https://github.com/RiwEZ/MLPOnRust}{Github repository} or in this document appendix.
+\href{https://github.com/RiwEZ/FuzzyLogicOnRust}{Github repository} or in this document appendix.
 
 \section*{Introduction}
 The term ``securities and other assets" in our report include securities such as stock, bonds, currencies, and other assets
-i.e. crypto-currency, house price, etc. In this report, we will focus on crypto-currency such as Bitcoin and Ethereum. Before we delve 
+i.e. crypto-currency, house price, etc. In this report, we will focus on crypto-currency such as Ethereum. Before we delve 
 further, let's understand that we are not trying to create more profit than any other techniques but we are trying to learn how
 to create fuzzy logic and explore how it might be useful for trading.
 
-\subsection*{Technical Indicators}
+\subsection*{Technical Indicators} 
+\label{tech}
 According to \cite{technical_indicator}, ``Technical indicators are heuristic or pattern-based signals produced by the price, volume, 
 and/or open interest of a security or contract used by traders who follow technical analysis.
 By analyzing historical data, technical analysts use indicators to predict future price movements."
@@ -88,14 +92,14 @@ $$
 \text{MA}(n) = \frac{\sum_{i = 1}^{n}{p_i}}{n}
 $$
 $$
-\sigma(n) = \sqrt{\frac{\sum_{i = 1}^{n}{p_i - \text{MA}(n)}}{n}}
+\sigma(n) = \sqrt{\frac{\sum_{i = 1}^{n}{(p_i - \text{MA}(n))^2}}{n}}
 $$
 where each $p_i$ is a typical price calulated as $p_i = \frac{(\text{high}_i + \text{low}_i + \text{close}_i)}{3}$
 
 Common number of sessions are $n = 20$ and a common interpretation is the closer the prices move to $\text{BOLU}$, 
 the more overbought the market, and the closer the prices move to the lower band, the more oversold the market.
 For using in our fuzzy logic, we will use $\text{BOLU}$ and $\text{BOLD}$ as a 100\% mark from $\text{MA}$ and we will
-compute the diffrence of price from $\text{MA}$ to use it e.g. $\text{price} = 100$, and $\sigma = 10$
+compute the diffrence of price from $\text{MA}$ to use it e.g. $\text{price} = 100$, $\text{MA} = 89$, and $\sigma = 10$
 then we calculate $100 \times \frac{\text{price} - \text{MA}}{2\sigma} = 55$ which we will use on our fuzzy logic.  
 
 \section*{Entry rules}
@@ -109,15 +113,17 @@ For clarifying, a position in this report will be in these 2 types:
 \subsection*{Classic rules}
 The classic rules is based on set of fixed rules where the input are exact number and the outputs are binary values (1 - yes, 0 - no). 
 The condition is from the trader's belief which should have some uncertainty, but the classic rules can't include that uncertainty in the rules.
-An examples of classic rules can be seen on \cref*{table:1} and \cref*{table:2} which could be more complex and practical by adding more ``useful'' indicators.
+An examples of classic rules can be seen on \cref{table:1} and \cref{table:2} which could be more complex and more 
+practical by adding more ``useful'' indicators. In those examples, on the Bollinger Bands column we will use 
+$\beta =\frac{\text{price} - \text{MA}}{2\sigma}$ to determine how close is the price to $\text{BOLU}$ and $\text{BOLD}$.
 \begin{table}[htp]
 	\centering
 	\begin{tabular}{l c c c c c}
 		\toprule
         {} & {RSI} & {} & {Bollinger Bands} & {} & {LONG} \\ 
         \midrule
-        If & $<30$ & \& & $|\text{price} - \text{BOLD}| < 10$ & then & 1 \\
-        elseif & $<30$ & \& & $\text{price} - \text{BOLD} < -10$ & then & 1 \\
+        If & $<30$ & \& & $\beta < -0.9 $ & then & 1 \\
+        elseif & $<30$ & \& & $\beta \geq -0.9 \,\&\, \beta < 0.0$ & then & 1 \\
         else &  &  &  & then & 0 \\
         \bottomrule
     \end{tabular} 
@@ -130,8 +136,8 @@ An examples of classic rules can be seen on \cref*{table:1} and \cref*{table:2} 
 		\toprule
         {} & {RSI} & {} & {Bollinger Bands} & {} & {SHORT} \\ 
         \midrule
-        If & $ >70$ & \& & $|\text{price} - \text{BOLU}| < 10$ & then & 1 \\
-        elseif & $ >70$ & \& & $\text{price} - \text{BOLU} > 10$ & then & 1 \\
+        If & $ >70$ & \& & $\beta > 0.9$ & then & 1 \\
+        elseif & $ >70$ & \& & $\beta \leq 0.9 \,\&\, \beta > 0.0$ & then & 1 \\
         else &  &  &  & then & 0 \\
         \bottomrule
     \end{tabular} 
@@ -161,7 +167,12 @@ for each fuzzy set.
         \item SHORT: indicating oversold situation, favor short position. 
     \end{itemize}
     }
-    \item {Long, Short linguistic variable is described by WEAK, STRONG, VERYSTRONG, whose names are self explanatory.}
+    \item {Long, Short linguistic variable is described by 3 fuzzy sets:
+    \begin{itemize} 
+        \item WEAK: we should not enter the market
+        \item STRONG \& VERYSTRONG: we should enter the market but with different level of confidence.
+    \end{itemize}
+    }
 \end{itemize}
 
 \begin{figure}[ht]
@@ -182,6 +193,8 @@ for each fuzzy set.
     \label{fig:1}
 \end{figure}
 \FloatBarrier
+Follwing the common interpretation of both RSI and Bollinger Bands, we create fuzzy rules to match with those interpretation 
+as shown on \cref{table:3}.
 
 \begin{table}[htp]
 	\centering
@@ -203,8 +216,70 @@ for each fuzzy set.
     \caption{Fuzzy rules.}
 	\label{table:3}
 \end{table}
+\FloatBarrier
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[scale=0.45]{chart.png}
+    \caption{Result of fuzzy rules apply on each day from 2021-10-11 to 2022-10-09 where ETH price chart 
+    is the price in USD (obtained from coingecko), long signal is a defuzzification result of output LONG, and short signal is a 
+    defuzzification result of output SHORT.}
+    \label{fig:2}
+\end{figure}
+\FloatBarrier
+
+\section*{Experiment \& Analysis}
+We get ETH price data from coingecko, and apply our fuzzy rules using RSI and Bollinger Bands as inputs as we described in \nameref{tech} on each
+day from 2022-10-11 to 2022-10-09. The result can be seen on \cref{fig:2} which we can see the spikes on both long and short signal graph, 
+those spikes is what we will be interest on as an entry point. Next, we set up backtesting 
+(the general method for seeing how well a strategy or model would have done) for both classic and fuzzy rules with these rules:
+\begin{enumerate}
+    \item Initial capital is 1000\$ and we are not reinvesting any trade profit/loss into capital.
+    \item {We iterate over all data from 2022-10-11 to 2022-10-09 and entry a position of 100\$ following these conditions: 
+        \begin{itemize}
+            \item For fuzzy rules, if either long or short signal is greater than 40 we enter that position.
+            \item For classisc rule, we use the exact same rules as shown on \cref{table:1} and \cref{table:2}
+        \end{itemize}
+    }
+    \item {For each position, we take profit if the price difference (profit side) is greater than 20\% 
+        and stop-loss if the price difference (loss side) is greater than 10\%
+    }
+\end{enumerate}
+The backtesting result is shown on \cref{table:4}, which we can see that if we combine both fuzzy long and short signals we get more
+profit than both classic long and short signals combined. But, this might be from my poor design of classic rules examples however 
+classic rules can't provide us with the signal graph that is intuitive like fuzzy rules (as shown on \cref{fig:2})
+because the results of classic rules can be only 1 or 0. The fuzzy signal graph can visualize how likely you shoukd enter a market 
+e.g. the big spike on long signal, we can consider entering a position with more confidence because of it (which is likely to make us 
+a profit as we can see that the price is getting up considerably higher).
+
+\begin{table}[htp]
+	\centering
+	\begin{tabular}{c c c c c c c}
+		\toprule
+        {Signal used} & {Total trade} & {Profit trade} & {Loss trade} & {Total profit (\$)} & {Total loss (\$)} & {Net profit (\$)} \\ 
+        \midrule
+        Fuzzy Long & 9 & 6 & 3 & 139.26 & -40.132 & 99.131 \\
+        Fuzzy Short & 1 & 1 & 0 & 20.624 & 0.000 & 20.624 \\
+        Classic Long & 10 & 5 & 5 & 111.541 & -85.499 & 26.043 \\
+        Classic Short & 3 & 3 & 0 & 61.244 & 0.000 & 61.244 \\
+        \bottomrule
+    \end{tabular} 
+    \caption{Backtesting result.}
+	\label{table:4}
+\end{table}
+\FloatBarrier
+
+\section*{Conclusion}
+Fuzzy logic can be useful for trading securities because of its ability to deal with uncertainty and vagueness
+we can use more than just for entry rules for example we can use it for exit rules, setting a position size,
+etc. And the ability to visualize how fuzzy rules result in the signal graph can be a huge difference when
+deciding to enter a market. Furthermore, we can add more linguistic variables which we tailor to our likes
+or more rules to make fuzzy rules more practical and useful.
+
 
 \newpage
 \printbibliography
+
+\subfile{appendix}
 
 \end{document}

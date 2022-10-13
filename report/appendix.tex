@@ -1,0 +1,863 @@
+\definecolor{bg}{rgb}{0.97,0.97,0.98}
+
+\section*{Appendix}
+\noindent main.rs
+\begin{minted}[fontsize=\footnotesize, bgcolor=bg]{rust}
+pub mod backtest;
+pub mod data;
+pub mod rule;
+pub mod set;
+pub mod shape;
+
+use chrono::offset::{Local, TimeZone};
+use chrono::Date;
+use data::read_csv;
+use plotters::prelude::*;
+use rule::FuzzyEngine;
+use set::{arange, LinguisticVar};
+use shape::{trapezoidal, triangular};
+use std::error::Error;
+
+fn parse_time(t: &str) -> Date<Local> {
+    Local
+        .datetime_from_str(t, "%Y-%m-%d %H:%M:%S %Z")
+        .unwrap()
+        .date()
+}
+
+fn max_of_vec(vec: &Vec<f64>) -> f64 {
+    vec.iter().fold(f64::NAN, |max, &val| val.max(max))
+}
+
+fn min_of_vec(vec: &Vec<f64>) -> f64 {
+    vec.iter().fold(f64::NAN, |min, &val| val.min(min))
+}
+
+fn plot(date: &Vec<Date<Local>>, data: [&Vec<f64>; 3], path: &str) -> Result<(), Box<dyn Error>> {
+    let root = SVGBackend::new(path, (1024, 1024)).into_drawing_area();
+    root.fill(&WHITE)?;
+    let area = root.split_evenly((3, 1));
+
+    let colors = [&BLUE, &GREEN, &RED];
+    let names = ["ETH Price Chart", "Long Signal", "Short Signal"];
+    let limits = [
+        (min_of_vec(&data[0]), max_of_vec(&data[0])),
+        (0.0, 80.0),
+        (0.0, 80.0),
+    ];
+    for (i, draw_area) in area.iter().enumerate() {
+        let mut chart = ChartBuilder::on(&draw_area)
+            .caption(names[i], ("Hack", 44, FontStyle::Bold).into_font())
+            .set_label_area_size(LabelAreaPosition::Left, 70)
+            .set_label_area_size(LabelAreaPosition::Bottom, 60)
+            .margin_right(20)
+            .build_cartesian_2d(date[0]..date[date.len() - 1], limits[i].0..limits[i].1)?;
+
+        chart
+            .configure_mesh()
+            .y_max_light_lines(0)
+            .x_labels(11)
+            .x_label_formatter(&|v| format!("{}", v.format("%Y-%m-%d")))
+            .x_label_style(("Hack", 16).into_font())
+            .y_label_style(("Hack", 16).into_font())
+            .draw()?;
+
+        chart.draw_series(LineSeries::new(
+            date.iter().zip(data[i].iter()).map(|(d, p)| (*d, *p)),
+            colors[i].stroke_width(2),
+        ))?;
+    }
+    root.present()?;
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let rsi_var = LinguisticVar::new(
+        vec![
+            (&triangular(0f64, 1.0, 30f64), "low"),
+            (&triangular(50f64, 1.0, 30f64), "medium"),
+            (&triangular(100f64, 1.0, 30f64), "high"),
+        ],
+        arange(0f64, 100f64, 0.01),
+    );
+    let bb_var = LinguisticVar::new(
+        vec![
+            (&triangular(-120f64, 1.0, 30f64), "long"),
+            (&trapezoidal(-100f64, -50f64, 50f64, 100f64, 1.0), "wait"),
+            (&triangular(120f64, 1.0, 30f64), "short"),
+        ],
+        arange(-150f64, 150f64, 0.01),
+    );
+    let long = LinguisticVar::new(
+        vec![
+            (&triangular(0f64, 1.0, 15f64), "weak"),
+            (&triangular(30f64, 1.0, 30f64), "strong"),
+            (&triangular(100f64, 1.0, 60f64), "verystrong"),
+        ],
+        arange(0f64, 100f64, 0.01),
+    );
+    let short = LinguisticVar::new(
+        vec![
+            (&triangular(0f64, 1.0, 15f64), "weak"),
+            (&triangular(30f64, 1.0, 30f64), "strong"),
+            (&triangular(100f64, 1.0, 60f64), "verystrong"),
+        ],
+        arange(0f64, 100f64, 0.01),
+    );
+
+    //rsi_var.plot("rsi".into(), "img/rsi.svg".into())?;
+    //bb_var.plot("bollinger bands".into(), "img/bb.svg".into())?;
+    //long.plot("long, short".into(), "img/ls.svg".into())?;
+
+    let mut f_engine = FuzzyEngine::new([rsi_var, bb_var], [long, short]);
+
+    f_engine.add_rule(["high", "long"], ["weak", "weak"]);
+    f_engine.add_rule(["high", "wait"], ["weak", "strong"]);
+    f_engine.add_rule(["high", "short"], ["weak", "verystrong"]);
+
+    f_engine.add_rule(["medium", "long"], ["weak", "strong"]);
+    f_engine.add_rule(["medium", "wait"], ["weak", "weak"]);
+    f_engine.add_rule(["medium", "short"], ["strong", "weak"]);
+
+    f_engine.add_rule(["low", "long"], ["verystrong", "weak"]);
+    f_engine.add_rule(["low", "wait"], ["strong", "weak"]);
+    f_engine.add_rule(["low", "short"], ["weak", "weak"]);
+
+    let data = read_csv("eth.csv");
+    let rsi = data::rsi(&data, 14)[2256..].to_vec();
+    let bb = data::bb(&data, 20)[2256..].to_vec();
+    let price: Vec<f64> = data[2256..].iter().map(|x| x.price).collect();
+    let bb_inputs: Vec<f64> = price
+        .iter()
+        .zip(bb.iter())
+        .map(|(p, y)| 100.0 * (p - y.0) / (2.0 * y.1))
+        .collect();
+
+    let date: Vec<Date<Local>> = data[2256..]
+        .iter()
+        .map(|x| parse_time(x.snapped_at.as_str()))
+        .collect();
+
+    let mut long_singal: Vec<f64> = vec![];
+    let mut short_singal: Vec<f64> = vec![];
+    for i in 0..price.len() {
+        let result = f_engine.calculate([rsi[i], bb_inputs[i]]);
+        long_singal.push(result[0].centroid_defuzz());
+        short_singal.push(result[1].centroid_defuzz());
+    }
+    /*
+    plot(
+        &date,
+        [&price, &long_singal, &short_singal],
+        "img/chart.svg",
+    )?;
+    */
+
+    backtest::f_backtest(&price, &long_singal, false);
+    backtest::f_backtest(&price, &short_singal, true);
+    backtest::c_backtest(&price, &rsi, &bb, false);
+    backtest::c_backtest(&price, &rsi, &bb, true);
+
+    Ok(())
+}
+\end{minted}
+\noindent rule.rs
+\begin{minted}[fontsize=\footnotesize, bgcolor=bg]{rust}
+use crate::set::*;
+
+pub struct FuzzyEngine<const N: usize, const M: usize> {
+    inputs_var: [LinguisticVar; N],
+    outputs_var: [LinguisticVar; M],
+    rules: Vec<(Vec<String>, Vec<String>)>, // list of ([input1_term, input2_term, ...] -> output_term)
+}
+
+impl<const N: usize, const M: usize> FuzzyEngine<N, M> {
+    pub fn new(
+        inputs_var: [LinguisticVar; N],
+        output_var: [LinguisticVar; M],
+    ) -> FuzzyEngine<N, M> {
+        FuzzyEngine {
+            inputs_var,
+            outputs_var: output_var,
+            rules: Vec::<(Vec<String>, Vec<String>)>::new(),
+        }
+    }
+
+    pub fn add_rule(&mut self, cond: [&str; N], res: [&str; M]) {
+        for i in 0..self.inputs_var.len() {
+            self.inputs_var[i].term(&cond[i]); // check if term "cond[i]" exist
+        }
+        for i in 0..self.outputs_var.len() {
+            self.outputs_var[i].term(&res[i]); // term() check if term "res" is exist
+        }
+
+        let conditions: Vec<String> = cond.iter().map(|x| x.to_string()).collect();
+        let results: Vec<String> = res.iter().map(|x| x.to_string()).collect();
+        self.rules.push((conditions, results));
+    }
+
+    pub fn calculate(&self, inputs: [f64; N]) -> Vec<FuzzySet> {
+        let mut temp: Vec<Vec<FuzzySet>> = vec![];
+        for j in 0..self.rules.len() {
+            let mut aj = f64::MAX;
+            for i in 0..self.rules[j].0.len() {
+                let fuzzy_set = self.inputs_var[i].term(&self.rules[j].0[i]);
+                let v = fuzzy_set.degree_of(inputs[i]);
+                aj = aj.min(v);
+            }
+
+            let mut t: Vec<FuzzySet> = vec![];
+            for i in 0..self.rules[j].1.len() {
+                t.push(
+                    self.outputs_var[i]
+                        .term(&self.rules[j].1[i])
+                        .min(aj, format!("f{}", j)),
+                );
+            }
+
+            temp.push(t);
+        }
+        let mut res: Vec<FuzzySet> = vec![];
+        for i in 0..M {
+            res.push(temp[0][i].std_union(&temp[0][i], "".into()));
+        }
+        for j in 1..temp.len() {
+            for i in 0..M {
+                res[i] = res[i].std_union(&temp[j][i], "".into());
+            }
+        }
+        res
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shape::*;
+    use std::error::Error;
+
+    #[test]
+    #[should_panic]
+    fn test_adding_rule() {
+        let rsi = LinguisticVar::new(
+            vec![
+                (&triangular(20f64, 1.0, 20f64), "low"),
+                (&triangular(80f64, 1.0, 20f64), "high"),
+            ],
+            arange(0f64, 100f64, 0.01),
+        );
+
+        let mut f_engine = FuzzyEngine::new([rsi.clone()], [rsi]);
+        f_engine.add_rule(["medium".into()], ["low".into()]);
+    }
+
+    #[test]
+    fn basic_test() -> Result<(), Box<dyn Error>> {
+        let rsi = LinguisticVar::new(
+            vec![
+                (&triangular(20f64, 1.0, 20f64), "low"),
+                (&triangular(80f64, 1.0, 20f64), "high"),
+            ],
+            arange(0f64, 100f64, 0.01),
+        );
+
+        let ma = LinguisticVar::new(
+            vec![(&triangular(30f64, 0.8, 20f64), "low")],
+            arange(0f64, 100f64, 0.01),
+        );
+
+        let trend = LinguisticVar::new(
+            vec![(&triangular(30f64, 1f64, 30f64), "weak")],
+            arange(0f64, 100f64, 0.01),
+        );
+
+        rsi.plot("rsi".into(), "img/test/rsi.svg".into())?;
+        ma.plot("ma".into(), "img/test/ma.svg".into()).unwrap();
+        ma.plot("ma".into(), "img/test/ma.svg".into()).unwrap();
+        trend
+            .plot("trend".into(), "img/test/trend.svg".into())
+            .unwrap();
+
+        let mut f_engine = FuzzyEngine::new([rsi, ma], [trend]);
+
+        f_engine.add_rule(["low", "low"], ["weak"]);
+        f_engine.add_rule(["high", "low"], ["weak"]);
+
+        let res = f_engine.calculate([15f64, 25f64]);
+        res[0].plot("t2".into(), "img/test/t2.svg".into())?;
+
+        Ok(())
+    }
+}
+\end{minted}
+\noindent set.rs
+\begin{minted}[fontsize=\footnotesize, bgcolor=bg]{rust}
+use crate::shape::*;
+use plotters::prelude::*;
+use std::error::Error;
+
+pub fn arange(start: f64, stop: f64, interval: f64) -> Vec<f64> {
+    if stop < start {
+        panic!("end can not be less than start");
+    } else if interval <= 0f64 {
+        panic!("interval must be > 0");
+    }
+
+    let mut members: Vec<f64> = vec![];
+    let r = 1.0 / interval;
+    let mut n = start;
+    while n <= stop {
+        members.push(n);
+        n += interval;
+        if interval < 1.0 {
+            n = (n * r).round() / r;
+        }
+    }
+    members
+}
+
+#[derive(Clone)]
+pub struct LinguisticVar {
+    pub sets: Vec<FuzzySet>,
+    pub universe: Vec<f64>,
+}
+
+impl LinguisticVar {
+    pub fn new(inputs: Vec<(&dyn Shape, &str)>, universe: Vec<f64>) -> LinguisticVar {
+        let mut sets: Vec<FuzzySet> = vec![];
+        for item in inputs {
+            sets.push(FuzzySet::new(&universe, item.0, item.1.to_string()));
+        }
+        LinguisticVar { sets, universe }
+    }
+
+    pub fn term(&self, name: &str) -> &FuzzySet {
+        match self.sets.iter().find(|x| x.name == name.to_string()) {
+            Some(x) => x,
+            None => panic![
+                "there're no fuzzy set name {} in this linguistic variable",
+                name
+            ],
+        }
+    }
+
+    pub fn plot(&self, name: String, path: String) -> Result<(), Box<dyn Error>> {
+        let root = SVGBackend::new(&path, (1024, 768)).into_drawing_area();
+        root.fill(&WHITE)?;
+
+        let mut chart = ChartBuilder::on(&root)
+            .caption(name, ("Hack", 70, FontStyle::Bold).into_font())
+            .set_label_area_size(LabelAreaPosition::Left, 60)
+            .set_label_area_size(LabelAreaPosition::Bottom, 60)
+            .margin(60)
+            .build_cartesian_2d(
+                self.universe[0]..self.universe[self.universe.len() - 1],
+                0f64..1f64,
+            )?;
+
+        chart
+            .configure_mesh()
+            .disable_x_mesh()
+            .y_max_light_lines(0)
+            .x_labels(5)
+            .y_labels(5)
+            .x_label_style(("Hack", 40).into_font())
+            .y_label_style(("Hack", 40).into_font())
+            .draw()?;
+
+        for i in 0..self.sets.len() {
+            let color = Palette99::pick(i);
+            chart
+                .draw_series(LineSeries::new(
+                    self.universe
+                        .iter()
+                        .zip(self.sets[i].membership.iter())
+                        .map(|(x, y)| (*x, *y)),
+                    color.mix(0.5).stroke_width(4),
+                ))?
+                .label(self.sets[i].name.clone())
+                .legend(move |(x, y)| {
+                    PathElement::new([(x, y), (x + 20, y)], color.filled().stroke_width(4))
+                });
+            // there're a problem with styling legend
+        }
+
+        chart
+            .configure_series_labels()
+            .label_font(("Hack", 50).into_font())
+            .background_style(&WHITE)
+            .border_style(&BLACK)
+            .draw()?;
+
+        root.present()?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FuzzySet {
+    pub name: String,
+    pub universe: Vec<f64>, // universe of discourse that own this set
+    pub membership: Vec<f64>,
+}
+
+impl FuzzySet {
+    pub fn new(universe: &Vec<f64>, fuzzy_f: &dyn Shape, name: String) -> FuzzySet {
+        let mut membership: Vec<f64> = vec![];
+        for i in 0..universe.len() {
+            membership.push(fuzzy_f.function(universe[i]));
+        }
+        FuzzySet {
+            name: name.to_string(),
+            universe: universe.clone(),
+            membership,
+        }
+    }
+
+    pub fn plot(&self, name: String, path: String) -> Result<(), Box<dyn Error>> {
+        let root = SVGBackend::new(&path, (1024, 768)).into_drawing_area();
+        root.fill(&WHITE)?;
+
+        let mut chart = ChartBuilder::on(&root)
+            .caption(name, ("Hack", 44, FontStyle::Bold).into_font())
+            .set_label_area_size(LabelAreaPosition::Left, 60)
+            .set_label_area_size(LabelAreaPosition::Bottom, 60)
+            .margin(20)
+            .build_cartesian_2d(
+                self.universe[0]..self.universe[self.universe.len() - 1],
+                0f64..1f64,
+            )?;
+
+        chart
+            .configure_mesh()
+            .disable_x_mesh()
+            .disable_y_mesh()
+            .draw()?;
+
+        let color = Palette99::pick(0);
+        chart
+            .draw_series(LineSeries::new(
+                self.universe
+                    .iter()
+                    .zip(self.membership.iter())
+                    .map(|(x, y)| (*x, *y)),
+                color.stroke_width(2),
+            ))?
+            .label(self.name.clone())
+            .legend(move |(x, y)| PathElement::new([(x, y), (x + 20, y)], color.filled()));
+
+        chart
+            .configure_series_labels()
+            .label_font(("Hack", 14).into_font())
+            .background_style(&WHITE)
+            .border_style(&BLACK)
+            .draw()?;
+
+        root.present()?;
+
+        Ok(())
+    }
+
+    pub fn degree_of(&self, input: f64) -> f64 {
+        // edge case
+        if input < self.universe[0] {
+            return self.membership[0];
+        } else if input > self.universe[self.universe.len() - 1] {
+            return self.membership[self.membership.len() - 1];
+        }
+        let mut min_x = f64::MAX;
+        let mut j: usize = 0;
+        for (i, x) in self.universe.iter().enumerate() {
+            let diff = (x - input).abs();
+            if diff < min_x {
+                j = i;
+                min_x = diff;
+            }
+        }
+        self.membership[j]
+    }
+
+    pub fn centroid_defuzz(&self) -> f64 {
+        let top_sum = self
+            .universe
+            .iter()
+            .enumerate()
+            .fold(0.0, |s, (x, y)| s + (self.membership[x] * y));
+        let bot_sum = self.membership.iter().fold(0.0, |s, v| s + v);
+        if bot_sum == 0.0 {
+            return 0.0;
+        }
+        top_sum / bot_sum
+    }
+
+    pub fn min(&self, input: f64, name: String) -> FuzzySet {
+        let mut membership: Vec<f64> = vec![];
+        for i in 0..self.membership.len() {
+            membership.push(self.membership[i].min(input));
+        }
+        FuzzySet {
+            name: name.to_string(),
+            universe: self.universe.clone(),
+            membership,
+        }
+    }
+
+    pub fn std_union(&self, set: &FuzzySet, name: String) -> FuzzySet {
+        // check if domain is equal or not?
+        if self.universe != set.universe {
+            panic!("domain needs to be equal");
+        }
+
+        // if equal
+        let mut membership: Vec<f64> = vec![];
+        for i in 0..self.membership.len() {
+            membership.push(self.membership[i].max(set.membership[i]));
+        }
+        FuzzySet {
+            name: name.to_string(),
+            universe: self.universe.clone(),
+            membership,
+        }
+    }
+
+    pub fn std_intersect(&self, set: &FuzzySet, name: String) -> FuzzySet {
+        // check if domain is equal or not?
+        if self.universe != set.universe {
+            panic!("domain needs to be equal");
+        }
+
+        // if equal
+        let mut membership: Vec<f64> = vec![];
+        for i in 0..self.membership.len() {
+            membership.push(self.membership[i].min(set.membership[i]));
+        }
+        FuzzySet {
+            name: name.to_string(),
+            universe: self.universe.clone(),
+            membership,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_arange() {
+        assert_eq!(arange(0f64, 5f64, 1f64), vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+        assert_eq!(
+            arange(0f64, 0.5f64, 0.1f64),
+            vec![0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+        );
+    }
+
+    #[test]
+    fn test_degree() {
+        let s1 = FuzzySet::new(
+            &arange(0.0, 10.0, 0.01),
+            &triangular(5f64, 0.8f64, 3f64),
+            "f1".into(),
+        );
+
+        assert_eq!(s1.degree_of(11.0f64), 0.0);
+        assert_eq!(s1.degree_of(5.0f64), 0.8);
+        assert_eq!(s1.degree_of(3.5f64), 0.4);
+        assert_eq!(s1.degree_of(0.0f64), 0.0);
+        assert_eq!(s1.degree_of(-1.0f64), 0.0);
+    }
+
+    #[test]
+    fn linguistic() {
+        let var1 = LinguisticVar::new(
+            vec![
+                (&triangular(5f64, 0.8, 3f64), "normal"),
+                (&triangular(3f64, 0.8, 1.5f64), "weak"),
+            ],
+            arange(0f64, 10f64, 0.01),
+        );
+
+        assert_eq!(var1.term("normal").degree_of(5.0), 0.8);
+        assert_eq!(var1.term("weak").degree_of(3.0), 0.8);
+
+        var1.plot("var1".into(), "img/t.svg".into()).unwrap();
+    }
+}
+
+\end{minted}
+\noindent shape.rs
+\begin{minted}[fontsize=\footnotesize, bgcolor=bg]{rust}
+pub trait Shape {
+    fn function(&self, x: f64) -> f64;
+}
+
+pub struct Triangular {
+    a: f64,
+    b: f64,
+    s: f64,
+}
+
+impl Shape for Triangular {
+    fn function(&self, x: f64) -> f64 {
+        if (self.a - self.s) <= x && x <= (self.a + self.s) {
+            return self.b * (1.0 - (x - self.a).abs() / self.s);
+        }
+        0.0
+    }
+}
+
+pub fn triangular(a: f64, b: f64, s: f64) -> Triangular {
+    Triangular { a, b, s }
+}
+
+pub struct Trapezoidal {
+    a: f64,
+    b: f64,
+    c: f64,
+    d: f64,
+    e: f64,
+}
+
+impl Shape for Trapezoidal {
+    fn function(&self, x: f64) -> f64 {
+        if x >= self.a && x < self.b {
+            return ((x - self.a) * self.e) / (self.b - self.a);
+        } else if x >= self.b && x <= self.c {
+            return self.e;
+        } else if x > self.c && x <= self.d {
+            return self.e * (1.0 - (x - self.c).abs() / (self.d - self.c));
+        }
+        0.0
+    }
+}
+
+pub fn trapezoidal(a: f64, b: f64, c: f64, d: f64, e: f64) -> Trapezoidal {
+    Trapezoidal { a, b, c, d, e }
+}
+
+\end{minted}
+\noindent data.rs
+\begin{minted}[fontsize=\footnotesize, bgcolor=bg]{rust}
+use serde::Deserialize;
+use std::fs;
+
+#[derive(Deserialize, Debug)]
+pub struct Record {
+    pub snapped_at: String,
+    pub price: f64,
+}
+
+/// return (gain, loss)
+fn gain_loss(p0: f64, p1: f64) -> (f64, f64) {
+    let mut res = (0.0, 0.0);
+    if p1 > p0 {
+        res.0 = p1 - p0
+    } else {
+        res.1 = -(p1 - p0)
+    }
+    res
+}
+
+pub fn rsi(data: &Vec<Record>, n: usize) -> Vec<f64> {
+    let mut rsi: Vec<f64> = vec![];
+
+    let mut gains: Vec<f64> = vec![];
+    let mut losses: Vec<f64> = vec![];
+
+    let mut avg_g: Vec<f64> = vec![];
+    let mut avg_l: Vec<f64> = vec![];
+
+    for (i, item) in data.iter().enumerate() {
+        if i <= n + 1 && i > 0 {
+            let gl = gain_loss(data[i - 1].price, item.price);
+            gains.push(gl.0);
+            losses.push(gl.1);
+        }
+
+        if i <= n {
+            rsi.push(-1.0);
+            avg_g.push(0.0);
+            avg_l.push(0.0);
+        } else if i == n + 1 {
+            let avg_gain = gains.iter().sum::<f64>() / (n as f64);
+            let avg_loss = losses.iter().sum::<f64>() / (n as f64);
+            rsi.push(100f64 - 100f64 / (1.0 + (avg_gain / avg_loss)));
+            avg_g.push(avg_gain);
+            avg_l.push(avg_loss);
+        } else {
+            let gl = gain_loss(data[i - 1].price, item.price);
+            let avg_gain = (avg_g[i - 1] * (n - 1) as f64 + gl.0) / (n as f64);
+            let avg_loss = (avg_l[i - 1] * (n - 1) as f64 + gl.1) / (n as f64);
+            rsi.push(100f64 - 100f64 / (1.0 + (avg_gain / avg_loss)));
+            avg_g.push(avg_gain);
+            avg_l.push(avg_loss);
+        }
+    }
+    rsi
+}
+
+/// return vector of (ma, std)
+pub fn bb(data: &Vec<Record>, n: usize) -> Vec<(f64, f64)> {
+    let mut bb: Vec<(f64, f64)> = vec![];
+    for (i, _) in data.iter().enumerate() {
+        if i < n {
+            bb.push((-1.0, -1.0));
+            continue;
+        }
+
+        let mut sum = 0.0;
+        for j in (i - n)..i {
+            sum += data[j].price;
+        }
+        let ma = sum / (n as f64);
+
+        let mut std_sum = 0.0;
+        for j in (i - n)..i {
+            std_sum += (data[j].price - ma).powi(2);
+        }
+        let std = (std_sum / n as f64).sqrt();
+        bb.push((ma, std));
+    }
+    bb
+}
+
+/// read coingecko csv data
+pub fn read_csv(path: &str) -> Vec<Record> {
+    let contents = fs::read_to_string(path).unwrap();
+
+    let mut rdr = csv::Reader::from_reader(contents.as_bytes());
+    let mut data: Vec<Record> = vec![];
+    for result in rdr.deserialize() {
+        let record: Record = result.unwrap();
+        data.push(record);
+    }
+    data
+}
+
+\end{minted}
+\noindent backtest.rs
+\begin{minted}[fontsize=\footnotesize, bgcolor=bg]{rust}  
+// get long, short signal as an input
+// iterate over all data with inital capital 1000$
+// entry when signal is >= 40
+// entry size is 20% of capital
+// stop-loss when price go down 10%
+// take profit when price go up 20%
+
+struct Position {
+    at_price: f64,
+    at_time: usize,
+    amount: f64,
+    realize: bool,
+}
+
+impl Position {
+    pub fn new(price: f64, money: f64, time: usize) -> Position {
+        Position {
+            at_price: price,
+            at_time: time,
+            amount: money / price,
+            realize: false,
+        }
+    }
+}
+
+fn realizing_pos(capital: f64, price: &Vec<f64>, pos_list: &mut Vec<Position>, pos_type: bool) {
+    let mut profit: Vec<f64> = vec![];
+    let mut losses: Vec<f64> = vec![];
+    for (i, p) in price.iter().enumerate() {
+        for j in 0..pos_list.len() {
+            if i <= pos_list[j].at_time || pos_list[j].realize == true {
+                continue;
+            }
+            let diff = (p - pos_list[j].at_price) / pos_list[j].at_price * 100.0;
+            if !pos_type {
+                if diff > 20.0 {
+                    profit.push((p - pos_list[j].at_price) * pos_list[j].amount);
+                    pos_list[j].realize = true;
+                } else if diff < -10.0 {
+                    losses.push((p - pos_list[j].at_price) * pos_list[j].amount);
+                    pos_list[j].realize = true;
+                }
+            } else {
+                if diff < -20.0 {
+                    profit.push(-1.0 * (p - pos_list[j].at_price) * pos_list[j].amount);
+                    pos_list[j].realize = true;
+                } else if diff > 10.0 {
+                    losses.push(-1.0 * (p - pos_list[j].at_price) * pos_list[j].amount);
+                    pos_list[j].realize = true;
+                }
+            }
+        }
+    }
+
+    let total_profit = profit.iter().fold(0.0, |s, x| s + x);
+    let total_losses = losses.iter().fold(0.0, |s, x| s + x);
+    println!("total trade: {:.3}", pos_list.len());
+    println!("net profit: {:.3}", total_profit + total_losses);
+    println!("count: {}, profits: {:.3}", profit.len(), total_profit);
+    println!("count: {}, losses: {:.3}", losses.len(), total_losses);
+    println!("---------------");
+    /*
+    println!(
+        "total capital(+net_profit)): {}",
+        capital + (1000.0 - capital) + total_profit + total_losses
+    );
+    */
+}
+
+/// Fuzzy BackTest
+/// pos_type - false for long, true for short
+pub fn f_backtest(price: &Vec<f64>, signal: &Vec<f64>, pos_type: bool) {
+    let mut capital = 1000.0;
+    let mut pos_list: Vec<Position> = vec![];
+
+    for (i, p) in price.iter().enumerate() {
+        if signal[i] >= 40.0 {
+            if capital > 0.0 {
+                let pos = Position::new(*p, 100.0, i);
+                capital -= 100.0;
+                pos_list.push(pos);
+            }
+        }
+    }
+
+    realizing_pos(capital, price, &mut pos_list, pos_type)
+}
+
+pub fn c_backtest(price: &Vec<f64>, rsi: &Vec<f64>, bb: &Vec<(f64, f64)>, pos_type: bool) {
+    let mut capital = 1000.0;
+    let mut pos_list: Vec<Position> = vec![];
+
+    for (i, p) in price.iter().enumerate() {
+        let beta = (p - bb[i].0) / (2.0 * bb[i].1);
+        if !pos_type {
+            if rsi[i] < 30.0 && beta < -0.9 {
+                if capital > 0.0 {
+                    let pos = Position::new(*p, 100.0, i);
+                    capital -= 100.0;
+                    pos_list.push(pos);
+                } else if rsi[i] < 30.0 && beta >= -0.9 && beta < 0.0 {
+                    let pos = Position::new(*p, 100.0, i);
+                    capital -= 100.0;
+                    pos_list.push(pos);
+                }
+            }
+        } else {
+            if rsi[i] > 70.0 && beta < 0.9 {
+                if capital > 0.0 {
+                    let pos = Position::new(*p, 100.0, i);
+                    capital -= 100.0;
+                    pos_list.push(pos);
+                } else if rsi[i] > 70.0 && beta <= 0.9 && beta > 0.0 {
+                    let pos = Position::new(*p, 100.0, i);
+                    capital -= 100.0;
+                    pos_list.push(pos);
+                }
+            }
+        }
+    }
+
+    realizing_pos(capital, price, &mut pos_list, pos_type)
+}
+\end{minted}
