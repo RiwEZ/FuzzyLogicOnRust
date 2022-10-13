@@ -1,3 +1,4 @@
+pub mod backtest;
 pub mod data;
 pub mod rule;
 pub mod set;
@@ -27,42 +28,40 @@ fn min_of_vec(vec: &Vec<f64>) -> f64 {
     vec.iter().fold(f64::NAN, |min, &val| val.min(min))
 }
 
-fn plot(date: &Vec<Date<Local>>, price: &Vec<f64>) -> Result<(), Box<dyn Error>> {
-    let root = SVGBackend::new("img/chart.svg", (1024, 768)).into_drawing_area();
+fn plot(date: &Vec<Date<Local>>, data: [&Vec<f64>; 3], path: &str) -> Result<(), Box<dyn Error>> {
+    let root = SVGBackend::new(path, (1024, 1024)).into_drawing_area();
     root.fill(&WHITE)?;
+    let area = root.split_evenly((3, 1));
 
-    let mut chart = ChartBuilder::on(&root)
-        .caption("ETH Chart", ("Hack", 44, FontStyle::Bold).into_font())
-        .set_label_area_size(LabelAreaPosition::Left, 60)
-        .set_label_area_size(LabelAreaPosition::Bottom, 60)
-        .margin(60)
-        .build_cartesian_2d(
-            date[0]..date[date.len() - 1],
-            (min_of_vec(&price) - 100.0)..(max_of_vec(&price) + 100.0),
-        )?;
+    let colors = [&BLUE, &GREEN, &RED];
+    let names = ["ETH Price Chart", "Long Signal", "Short Signal"];
+    let limits = [
+        (min_of_vec(&data[0]), max_of_vec(&data[0])),
+        (0.0, 80.0),
+        (0.0, 80.0),
+    ];
+    for (i, draw_area) in area.iter().enumerate() {
+        let mut chart = ChartBuilder::on(&draw_area)
+            .caption(names[i], ("Hack", 44, FontStyle::Bold).into_font())
+            .set_label_area_size(LabelAreaPosition::Left, 70)
+            .set_label_area_size(LabelAreaPosition::Bottom, 60)
+            .margin_right(20)
+            .build_cartesian_2d(date[0]..date[date.len() - 1], limits[i].0..limits[i].1)?;
 
-    chart
-        .configure_mesh()
-        .max_light_lines(0)
-        .x_labels(5)
-        .x_label_formatter(&|v| format!("{}", v.format("%Y-%m-%d")))
-        .draw()?;
+        chart
+            .configure_mesh()
+            .y_max_light_lines(0)
+            .x_labels(11)
+            .x_label_formatter(&|v| format!("{}", v.format("%Y-%m-%d")))
+            .x_label_style(("Hack", 16).into_font())
+            .y_label_style(("Hack", 16).into_font())
+            .draw()?;
 
-    chart
-        .draw_series(LineSeries::new(
-            date.iter().zip(price.iter()).map(|(d, p)| (*d, *p)),
-            &BLUE,
-        ))?
-        .label("price")
-        .legend(move |(x, y)| PathElement::new([(x, y), (x + 20, y)], &BLUE));
-
-    chart
-        .configure_series_labels()
-        .label_font(("Hack", 20).into_font())
-        .background_style(&WHITE)
-        .border_style(&BLACK)
-        .draw()?;
-
+        chart.draw_series(LineSeries::new(
+            date.iter().zip(data[i].iter()).map(|(d, p)| (*d, *p)),
+            colors[i].stroke_width(2),
+        ))?;
+    }
     root.present()?;
     Ok(())
 }
@@ -133,6 +132,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|x| parse_time(x.snapped_at.as_str()))
         .collect();
-    plot(&date, &price)?;
+
+    let mut long_singal: Vec<f64> = vec![];
+    let mut short_singal: Vec<f64> = vec![];
+    for i in 0..price.len() {
+        let result = f_engine.calculate([rsi[i], bb_inputs[i]]);
+        long_singal.push(result[0].centroid_defuzz());
+        short_singal.push(result[1].centroid_defuzz());
+    }
+    /*
+    plot(
+        &date,
+        [&price, &long_singal, &short_singal],
+        "img/chart.svg",
+    )?;
+    */
+
+    backtest::f_backtest(&price, &long_singal, false);
+    backtest::f_backtest(&price, &short_singal, true);
+    backtest::c_backtest(&price, &rsi, &bb, false);
+    backtest::c_backtest(&price, &rsi, &bb, true);
+
     Ok(())
 }

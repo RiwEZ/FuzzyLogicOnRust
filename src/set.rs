@@ -165,12 +165,35 @@ impl FuzzySet {
     }
 
     pub fn degree_of(&self, input: f64) -> f64 {
-        let i = self
+        // edge case
+        if input < self.universe[0] {
+            return self.membership[0];
+        } else if input > self.universe[self.universe.len() - 1] {
+            return self.membership[self.membership.len() - 1];
+        }
+        let mut min_x = f64::MAX;
+        let mut j: usize = 0;
+        for (i, x) in self.universe.iter().enumerate() {
+            let diff = (x - input).abs();
+            if diff < min_x {
+                j = i;
+                min_x = diff;
+            }
+        }
+        self.membership[j]
+    }
+
+    pub fn centroid_defuzz(&self) -> f64 {
+        let top_sum = self
             .universe
             .iter()
-            .position(|x| (*x - input).abs() < 0.0000001)
-            .unwrap();
-        self.membership[i]
+            .enumerate()
+            .fold(0.0, |s, (x, y)| s + (self.membership[x] * y));
+        let bot_sum = self.membership.iter().fold(0.0, |s, v| s + v);
+        if bot_sum == 0.0 {
+            return 0.0;
+        }
+        top_sum / bot_sum
     }
 
     pub fn min(&self, input: f64, name: String) -> FuzzySet {
@@ -243,9 +266,11 @@ mod tests {
             "f1".into(),
         );
 
+        assert_eq!(s1.degree_of(11.0f64), 0.0);
         assert_eq!(s1.degree_of(5.0f64), 0.8);
         assert_eq!(s1.degree_of(3.5f64), 0.4);
         assert_eq!(s1.degree_of(0.0f64), 0.0);
+        assert_eq!(s1.degree_of(-1.0f64), 0.0);
     }
 
     #[test]

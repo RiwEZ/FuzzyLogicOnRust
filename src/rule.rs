@@ -67,9 +67,9 @@ impl<const N: usize, const M: usize> FuzzyEngine<N, M> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::shape::*;
     use std::error::Error;
-    use super::*;
 
     #[test]
     #[should_panic]

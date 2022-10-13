@@ -56,6 +56,7 @@ pub fn rsi(data: &Vec<Record>, n: usize) -> Vec<f64> {
     rsi
 }
 
+/// return vector of (ma, std)
 pub fn bb(data: &Vec<Record>, n: usize) -> Vec<(f64, f64)> {
     let mut bb: Vec<(f64, f64)> = vec![];
     for (i, _) in data.iter().enumerate() {
