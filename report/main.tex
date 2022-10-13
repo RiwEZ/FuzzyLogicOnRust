@@ -57,7 +57,7 @@ that we will use are RSI (Relative Strength Index) and Bollinger Bands.
 According to \cite{rsi} ``The relative strength index (RSI) is a momentum indicator used in technical analysis. 
 RSI measures the speed and magnitude of a security's recent price changes to evaluate overvalued or 
 undervalued conditions in the price of that security."
-RSI is a value in range $[0, 100]$ and the value at time $t$ is defined as follows:
+RSI is a value in range $[0, 100]$ and the value at time $t$ is defined as \cite{rodrigo} shown:
 $$
     \text{RSI} = 100 - \frac{100}{1 + \text{RS}}
 $$
@@ -194,7 +194,7 @@ for each fuzzy set.
 \end{figure}
 \FloatBarrier
 Follwing the common interpretation of both RSI and Bollinger Bands, we create fuzzy rules to match with those interpretation 
-as shown on \cref{table:3}.
+as shown on \cref{table:3}. A Mamdani fuzzy system and centroid defuzzification is used in building the rules.
 
 \begin{table}[htp]
 	\centering
